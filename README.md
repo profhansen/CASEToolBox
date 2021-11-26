@@ -1,6 +1,6 @@
 # CASEToolBox
 
-CASEToolBox is a software package for performing Computational Aero-Servo-Elastic analysis of wind turbines. The code is still under development. The package currently only has the tool CASEStab for power and stability analysis. Currently (November 2021), CASEStab can only be used for computing the stationary steady state of a wind turbine rotor with identical blades in a uniform flow without gravity, and for computing the structural blade modal frequencies and mode shapes. See a [presentation](./CASEStab/docs/CASEStab.pdf) and an unfinished draft of a [Theory manual](./CASEStab/docs/theory_manual.pdf).
+CASEToolBox is a software package for performing Computational Aero-Servo-Elastic analysis of wind turbines. The code is still under development. The package currently only has the tool CASEStab for power and stability analysis. Currently (November 2021), CASEStab can only be used for computing the stationary steady state of a wind turbine rotor with identical blades in a uniform flow without gravity, and for computing the structural blade modal frequencies and mode shapes. See a [presentation](./casetoolbox/casestab/docs/CASEStab.pdf) and an unfinished draft of a [Theory manual](./casetoolbox/casestab/docs/theory_manual.pdf).
 
 ## Installation
 
@@ -21,4 +21,4 @@ which create two associated pyd-files.
 
 ## Running tests
 
-The plots shown in the [presentation](./CASEStab/docs/CASEStab.pdf) and many more should be created when you run the scripts in the test folder. 
+The plots shown in the [presentation](./casetoolbox/casestab/docs/CASEStab.pdf) and many more should be created when you run the scripts in the test folder. 
