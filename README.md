@@ -8,7 +8,7 @@ To install CASEToolBox into your Python environment run this command in the base
 ```
 pip install -e .
 ```
-CASEStab is currently (November 2021) using the following packages numpy, numba, scipy, and matplotlib.
+CASEStab is currently (November 2021) using the following packages [numpy](https://github.com/numpy/numpy), [numba](https://github.com/numba/numba), [scipy](https://github.com/scipy/scipy), and [matplotlib](https://github.com/matplotlib/matplotlib).
 
 ## Precompilation
 
