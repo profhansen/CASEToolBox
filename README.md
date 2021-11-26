@@ -21,4 +21,4 @@ which create two associated pyd-files.
 
 ## Running tests
 
-The plots shown in the [presentation](./casetoolbox/casestab/docs/CASEStab.pdf) and many more should be created when you run the scripts in the test folder. 
+The plots shown in the [presentation](./casetoolbox/casestab/docs/CASEStab.pdf) and many more plots can be created when you run the scripts in the test folder. Not all functionalities are currently (November 2021) tested with the uploaded tests.
