@@ -1,0 +1,42 @@
+{
+"hub":  {
+        "radius": 2.8,
+        "cone": 2.5
+        }
+        ,
+"blade": 
+        {"structure":   {
+                        "name": "HAWC2_beam_dtu10mw.dat",
+                        "znode"  : [],
+                        "bname"  : "blade1",
+                        "type"   : "HAWC2elements",
+                        "nintp"  : 50,
+                        "norder" : 0
+                        },
+        "aerodynamics": {
+                        "ae_file": "aero.dat",
+                        "pc_file": "DTU_10MW_RWT_pc.dat",
+                        "ae_setno": 1,
+                        "zaero"  : "cosine 50 86.366",
+                        "geo_inter": "akima",
+                        "ae_inter": "linear",
+                        "pc_inter": "pchip 0.1"
+                        }
+        },
+"rotor":{
+        "number_of_blades": 3
+        },
+"wake":{
+        "type": "axissym",
+        "a_of_CT_model": "HAWC2",
+        "tip_correction": 1
+        },
+"wind":{
+        "density": 1.225
+        },
+"operation": "ops_file operation_few.dat",
+"deflection": 1
+}
+
+
+

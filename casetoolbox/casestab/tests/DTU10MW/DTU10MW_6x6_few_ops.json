@@ -1,0 +1,43 @@
+{
+"hub":  {
+        "radius": 2.8,
+        "cone": 2.5
+        }
+        ,
+"blade": 
+        {"structure":   {
+                        "type"   : "6x6",
+                        "st_file": "stru_6x6.dat",
+                        "znode"  : [0.0000,3.0000,6.0000,7.0000,8.7005,10.4020,12.2046,13.2065,15.0100,18.2151,21.4178,24.6189,27.8193,31.0194,34.2197,40.2204,46.6217,53.0232,59.4245,65.8255,72.2261,79.0266,80.5267,82.0271,83.5274,85.0277,86.366],
+                        "setno"  : 1,
+                        "subsetno": 1,
+                        "nintp"  : 50,
+                        "norder" : 0
+                        },
+        "aerodynamics": {
+                        "ae_file": "aero.dat",
+                        "pc_file": "DTU_10MW_RWT_pc.dat",
+                        "ae_setno": 1,
+                        "zaero"  : "cosine 50 86.366",
+                        "geo_inter": "akima",
+                        "ae_inter": "linear",
+                        "pc_inter": "pchip 0.1"
+                        }
+        },
+"rotor":{
+        "number_of_blades": 3
+        },
+"wake":{
+        "type": "axissym",
+        "a_of_CT_model": "HAWC2",
+        "tip_correction": 1
+        },
+"wind":{
+        "density": 1.225
+        },
+"operation": "ops_file operation_few.dat",
+"deflection": 1
+}
+
+
+
