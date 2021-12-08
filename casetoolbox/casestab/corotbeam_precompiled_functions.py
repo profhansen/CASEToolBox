@@ -125,7 +125,7 @@ def dRmat(i,v):
     Si=np.zeros((3,3))
     Si[:,:]=Smat[:,:,i]
     SiS=matmul33(Si,S)
-    dR=(Si+0.5*(SiS+SiS.T))/d-0.5*v[i]*(S+0.5*matmul33(S,S))/d**2
+    dR=(Si+0.5*(SiS+SiS.T))/d-0.5*v[i]*(S+0.5*matmul33(S,S))/(d*d)
     return dR
 ## Second derivative of Rodrigues rotation matrix
 @njit(float64[:,:](int32,int32,float64[:]))
@@ -142,9 +142,9 @@ def ddRmat(i,j,v):
     SiSj=matmul33(Si,Sj)
     RmI=S+0.5*matmul33(S,S)
     ddR=0.5*(SiSj+SiSj.T)/d
-    -0.5*(Si+0.5*(SiS+SiS.T))*v[j]/d**2
-    -0.5*(Sj+0.5*(SjS+SjS.T))*v[i]/d**2
-    -0.5*RmI*Imat[i,j]/d**2+0.5*v[i]*v[j]*RmI/d**3
+    -0.5*(Si+0.5*(SiS+SiS.T))*v[j]/(d*d)
+    -0.5*(Sj+0.5*(SjS+SjS.T))*v[i]/(d*d)
+    -0.5*RmI*Imat[i,j]/(d*d)+0.5*v[i]*v[j]*RmI/(d*d*d)
     return ddR
 ## Rotate triad
 @njit(float64[:,:](float64[:,:],float64[:]))
@@ -264,7 +264,7 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
     # e2 is the t2 + q2 orthonormal to e3
     v=T[:,1]+Q[:,1]
     a=innerproduct(v,E[:,2])
-    d=np.sqrt(2.0+2.0*innerproduct(T[:,1],Q[:,1])-a**2)
+    d=np.sqrt(2.0+2.0*innerproduct(T[:,1],Q[:,1])-(a*a))
     e2tilde=v-a*E[:,2]
     E[:,1]=e2tilde/d
     # e1 is the cross-product of e2 and e3
@@ -278,13 +278,13 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
     #-------------------------------------------------------------------------
     # First derivative computations of e3
     for i in range(3):
-        dE_dqis[:,2,i]  =-Imat[:,i]/l+rvec[i]*rvec/l**3
+        dE_dqis[:,2,i]  =-Imat[:,i]/l+rvec[i]*rvec/(l*l*l)
         dE_dqis[:,2,i+6]=-dE_dqis[:,2,i]
     # Second derivative computations of e3
     for i in range(3):
         for j in range(i+1):
-            ddE_dqidqjs[:,2,ij12sym[i,j]]=rvec*(3.0*rvec[i]*rvec[j]/l**5-Imat[i,j]/l**3) \
-                                   -(Imat[:,i]*rvec[j]+Imat[:,j]*rvec[i])/l**3
+            ddE_dqidqjs[:,2,ij12sym[i,j]]=rvec*(3.0*rvec[i]*rvec[j]/(l*l*l*l*l)-Imat[i,j]/(l*l*l)) \
+                                   -(Imat[:,i]*rvec[j]+Imat[:,j]*rvec[i])/(l*l*l)
             ddE_dqidqjs[:,2,ij12sym[i+6,j+6]]=ddE_dqidqjs[:,2,ij12sym[i,j]]
     for i in range(3):
         for j in range(3):
@@ -298,7 +298,7 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
         dadi=innerproduct(v,dE_dqis[:,2,i])
         dd[m]=(-a*dadi)/d
         de2tilde_i=-dadi*E[:,2]-a*dE_dqis[:,2,i]
-        dE_dqis[:,1,m]=de2tilde_i/d-e2tilde*dd[m]/d**2
+        dE_dqis[:,1,m]=de2tilde_i/d-e2tilde*dd[m]/(d*d)
         dE_dqis[:,0,m]=crossproduct(dE_dqis[:,1,m],E[:,2]) \
                     +crossproduct(E[:,1],dE_dqis[:,2,i])
         # Second derivative computations for i = translations at node 1 and j = translations at node 1
@@ -311,8 +311,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=0.0
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=-ddadij*E[:,2]-dadi*dE_dqis[:,2,j]-dadj*dE_dqis[:,2,i]-a*ddE_dqidqjs[:,2,ij12sym[i,j]]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                         +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                         +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2]) \
                                     +crossproduct(dE_dqis[:,1,m],dE_dqis[:,2,j]) \
                                     +crossproduct(dE_dqis[:,1,n],dE_dqis[:,2,i]) \
@@ -325,7 +325,7 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
         dadi=innerproduct(dT[:,1,i],E[:,2])
         dd[m]=(innerproduct(dT[:,1,i],Q[:,1])-a*dadi)/d
         de2tilde_i=dT[:,1,i]-dadi*E[:,2]
-        dE_dqis[:,1,m]=de2tilde_i/d-e2tilde*dd[m]/d**2
+        dE_dqis[:,1,m]=de2tilde_i/d-e2tilde*dd[m]/(d*d)
         dE_dqis[:,0,m]=crossproduct(dE_dqis[:,1,m],E[:,2])
         # Second derivative computations i = rotations at node 1 and j = translations at node 1
         """ variations of e2 and e1 for q_m m=i+3 and q_n n=j """
@@ -337,8 +337,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=0.0
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=-ddadij*E[:,2]-dadi*dE_dqis[:,2,j]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                            +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                            +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2]) \
                                     +crossproduct(dE_dqis[:,1,m],dE_dqis[:,2,j])
         # Second derivative computations i = rotations at node 1 and j = rotations at node 1
@@ -351,8 +351,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=innerproduct(ddT[:,1,ij3sym[i,j]],Q[:,1])
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=ddT[:,1,ij3sym[i,j]]-ddadij*E[:,2]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                            +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                            +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2])
     #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     for i in range(3):
@@ -362,7 +362,7 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
         dadi=innerproduct(v,dE_dqis[:,2,m])
         dd[m]=(-a*dadi)/d
         de2tilde_i=-dadi*E[:,2]-a*dE_dqis[:,2,m]
-        dE_dqis[:,1,m]=de2tilde_i/d-e2tilde*dd[m]/d**2
+        dE_dqis[:,1,m]=de2tilde_i/d-e2tilde*dd[m]/(d*d)
         dE_dqis[:,0,m]=crossproduct(dE_dqis[:,1,m],E[:,2]) \
                       +crossproduct(E[:,1],dE_dqis[:,2,m])
         # Second derivative computations i = translations at node 2 and j = translations at node 1
@@ -375,8 +375,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=0.0
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=-ddadij*E[:,2]-dadi*dE_dqis[:,2,j]-dadj*dE_dqis[:,2,m]-a*ddE_dqidqjs[:,2,ij12sym[m,j]]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                             +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                             +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2]) \
                                     +crossproduct(dE_dqis[:,1,m],dE_dqis[:,2,j]) \
                                     +crossproduct(dE_dqis[:,1,n],dE_dqis[:,2,m]) \
@@ -391,8 +391,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=0.0
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=-ddadij*E[:,2]-dadj*dE_dqis[:,2,m]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                            +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                            +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2]) \
                                     +crossproduct(dE_dqis[:,1,n],dE_dqis[:,2,m])
         # Second derivative computations i = translations at node 2 and j = translations at node 2
@@ -405,8 +405,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=0.0
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=-ddadij*E[:,2]-dadi*dE_dqis[:,2,n]-dadj*dE_dqis[:,2,m]-a*ddE_dqidqjs[:,2,ij6sym[i+3,j+3]]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                             +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                             +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2]) \
                                     +crossproduct(dE_dqis[:,1,m],dE_dqis[:,2,n]) \
                                     +crossproduct(dE_dqis[:,1,n],dE_dqis[:,2,m]) \
@@ -419,7 +419,7 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
         dadi=innerproduct(dQ[:,1,i],E[:,2])
         dd[m]=(innerproduct(dQ[:,1,i],T[:,1])-a*dadi)/d
         de2tilde_i=dQ[:,1,i]-dadi*E[:,2]
-        dE_dqis[:,1,m]=de2tilde_i/d-e2tilde*dd[m]/d**2
+        dE_dqis[:,1,m]=de2tilde_i/d-e2tilde*dd[m]/(d*d)
         dE_dqis[:,0,m]=crossproduct(dE_dqis[:,1,m],E[:,2])
         # Second derivative computations i = rotations at node 2 and j = translations at node 1
         """ variations of e2 and e1 for q_m m=i+9 and q_n n=j """
@@ -431,8 +431,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=0.0
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=-ddadij*E[:,2]-dadi*dE_dqis[:,2,j]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                            +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                            +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2]) \
                                     +crossproduct(dE_dqis[:,1,m],dE_dqis[:,2,j])
         # Second derivative computations i = rotations at node 2 and j = rotations at node 1
@@ -445,8 +445,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=innerproduct(dT[:,1,j],dQ[:,1,i])
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=-ddadij*E[:,2]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                            +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                            +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2])
         # Second derivative computations i = rotations at node 2 and j = translations at node 2
         """ variations of e2 and e1 for q_m m=i+9 and q_n n=j+6 """
@@ -458,8 +458,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=0.0
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=-ddadij*E[:,2]-dadi*dE_dqis[:,2,n]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                            +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                            +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2]) \
                                     +crossproduct(dE_dqis[:,1,m],dE_dqis[:,2,n])
         # Second derivative computations i = rotations at node 2 and j = rotations at node 2
@@ -472,8 +472,8 @@ def compute_element_triad_and_position(r,T,Q,dT,dQ,ddT,ddQ):
             ddbdij=innerproduct(ddQ[:,1,ij3sym[i,j]],T[:,1])
             ddddij=(ddbdij-ddadij*a-dadi*dadj-dd[m]*dd[n])/d
             dde2tilde_ij=ddQ[:,1,ij3sym[i,j]]-ddadij*E[:,2]
-            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/d**2 \
-                                             +(2.0*dd[m]*dd[n]/d**3-ddddij/d**2)*e2tilde
+            ddE_dqidqjs[:,1,ij12sym[m,n]]=dde2tilde_ij/d-(dd[m]*de2tilde_j+dd[n]*de2tilde_i)/(d*d) \
+                                             +(2.0*dd[m]*dd[n]/(d*d*d)-ddddij/(d*d))*e2tilde
             ddE_dqidqjs[:,0,ij12sym[m,n]]=crossproduct(ddE_dqidqjs[:,1,ij12sym[m,n]],E[:,2])
     return l,E,rvec,rmid,d,dd,dE_dqis,ddE_dqidqjs
 ## Compute local nodal rotations (assumed small) and elongation
@@ -729,11 +729,11 @@ def update_second_derivative_local_nodal_rotations_elongation(l,rvec,E,dE_dqis,d
     # Second derivative of elongation of lower triangle row >= col
     for j in range(3):
         for k in range(j+1):
-            ddqldidj0[6,j,k]  = Imat[j,k]/l-rvec[j]*rvec[k]/l**3
+            ddqldidj0[6,j,k]  = Imat[j,k]/l-rvec[j]*rvec[k]/(l*l*l)
             ddqldidj0[6,j+6,k+6]=ddqldidj0[6,j,k]
     for j in range(3):
         for k in range(3):
-            ddqldidj0[6,j+6,k]=-Imat[j,k]/l+rvec[j]*rvec[k]/l**3
+            ddqldidj0[6,j+6,k]=-Imat[j,k]/l+rvec[j]*rvec[k]/(l*l*l)
     # Insert symmetric parts
     for k in range(7):
         for j in range(12):
@@ -1027,7 +1027,7 @@ def compute_element_total_force_matrix(ninterval,l,a,b,w):
     # Loop over each integration interval of the element
     for m in range(ninterval):
         for r in range(2):
-            tmp=(b[m]**(r+1)-a[m]**(r+1))/(r+1.0)
+            tmp=(np.power(b[m],(r+1))-np.power(a[m],(r+1)))/(r+1.0)
             for j in range(2):
                 for k in range(3):
                     Tf[:,3*(m+j)+k]+=0.5*l*tmp*w[m,r,j]*Imat[:,k]
@@ -1045,7 +1045,7 @@ def compute_element_total_moment_matrix(ninterval,norder,l,a,b,w,rf,e1):
     for m in range(ninterval):
         for r in range(2):
             for p in range(norder+4):
-                tmp=(b[m]**(p+r+1)-a[m]**(p+r+1))/(p+r+1.0)
+                tmp=(np.power(b[m],(p+r+1))-np.power(a[m],(p+r+1)))/(p+r+1.0)
                 for j in range(2):
                     for k in range(3):
                         TMf[:,:,3*(m+j)+k]+=0.5*l*tmp*w[m,r,j]*ek_vT(rf[:,m,p],k)
@@ -1064,7 +1064,7 @@ def compute_element_generalized_force_matrix(ninterval,norder,l,a,b,w,drf_dqi,de
     for m in range(ninterval):
         for r in range(2):
             for p in range(norder+4):
-                tmp=(b[m]**(p+r+1)-a[m]**(p+r+1))/(p+r+1.0)
+                tmp=(np.power(b[m],(p+r+1))-np.power(a[m],(p+r+1)))/(p+r+1.0)
                 for j in range(2):
                     for k in range(3):
                         for i in range(12):
@@ -1084,7 +1084,7 @@ def compute_element_stiffness_generalized_force_matrix(ninterval,norder,l,a,b,w,
     for m in range(ninterval):
         for r in range(2):
             for p in range(norder+4):
-                tmp=(b[m]**(p+r+1)-a[m]**(p+r+1))/(p+r+1.0)
+                tmp=(np.power(b[m],(p+r+1))-np.power(a[m],(p+r+1)))/(p+r+1.0)
                 for j in range(2):
                     for k in range(3):
                         for idof in range(12):
