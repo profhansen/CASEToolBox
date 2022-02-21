@@ -23,6 +23,7 @@
 # 
 import numpy as np
 from . import math_functions as mf
+from matplotlib import pyplot as plt
 
 #================================================================================================
 ## Class containing the aero model and states of a blade.
@@ -73,34 +74,15 @@ class aero_blade:
         # Create interpolation function of the ference curve of the CCS origin
         self.rc_curve = mf.curve_interpolate(para['geo_inter'].split()[0],self.aeset[:,0], self.aeset[:,1:3])
         # Read airfoil polars and interpolate them to equidistant arrays
-        fd=open(para['pro_file'],'r')
-        txt=fd.read()
-        lines=txt.split("\n")
         daoa = np.float(para['pro_inter'].split()[1])
-        self.naoa = int(360.0/daoa) + 1
-        aoas_deg = np.linspace(-180.0,180.0,self.naoa)
-        # All AoAs are in radians
-        self.aoas = np.radians(aoas_deg)
-        iline=0
-        nset=int(lines[iline].split()[0])
-        self.prosets = {}
-        self.origprosets = {}
-        for iset in range(nset):
-            iline+=1
-            nairfoil = int(lines[iline].split()[0])
-            proairfoil = {}
-            origproairfoil = {}
-            for iairfoil in range(nairfoil):
-                iline+=1
-                airfoil_nr, nrows = map(int, lines[iline].split()[:2])
-                thickness = np.float(lines[iline].split()[2])
-                polar = np.array([lines[iline+i+1].split() for i in range(nrows)], dtype=np.float)
-                origproairfoil[thickness] = polar
-                iline+=nrows
-                polar_curve = mf.curve_interpolate(para['pro_inter'].split()[0],polar[:,0], polar[:,1:])
-                proairfoil[thickness] = polar_curve.fcn(aoas_deg)
-            self.prosets[iset] = proairfoil
-            self.origprosets[iset] = origproairfoil
+        try:
+            self.naoa,self.aoas,self.prosets,self.origprosets = read_and_interpolate_HAWC2_polars(para['pro_file'],daoa,para['pro_inter'].split()[0])
+        except:
+            try:
+                self.naoa,self.aoas,self.prosets,self.origprosets = read_and_interpolate_Flex_polars(para['pro_file'],daoa,para['pro_inter'].split()[0])
+            except:
+                print('Could not read polar file')
+                # Work in progress: Here the program should end
         # Define the aerodynamic calculation points
         if isinstance(para['zaero'], np.ndarray):
             self.zaero = para['zaero']
@@ -228,8 +210,43 @@ class aero_blade:
         return dat
 
 
+    def get_AoA_stall_margins(self,max_rel_thickness):
+        # Create output of array with z [m], AoA_margin [deg], AoA [deg], CL [-], AoA for CL max [deg], CLmax [-]
+        dat = []
+        iaero_dat = []
+        for iaero in range(self.naero):
+            if self.aero_point[iaero].thk < max_rel_thickness:
+                dat.append([self.zaero[iaero], \
+                            self.aero_point[iaero].thk, \
+                            np.degrees(self.aero_point[iaero].aoa_clmax - self.aero_point[iaero].aoa_tp), \
+                            np.degrees(self.aero_point[iaero].aoa_tp), \
+                            self.aero_point[iaero].CL, \
+                            np.degrees(self.aero_point[iaero].aoa_clmax), \
+                            self.aero_point[iaero].clmax])
+                iaero_dat.append(iaero)
+        dat = np.array(dat)
+        return dat,iaero_dat
+    
+
+    def plot_stall_margins(self,aoalim,ihigh_lights=[],title=''):
+        fig = plt.figure(figsize=(8,6))
+        # Find indices of AoAs (the same for all ACPs) with the given limits
+        iaoa = np.intersect1d(np.nonzero(self.aero_point[0].aoas > np.radians(aoalim[0])),np.nonzero(self.aero_point[0].aoas < np.radians(aoalim[1])))
+        # Make plot
+        ax = fig.add_subplot(1, 1, 1, projection='3d')
+        for iaero in range(self.naero):
+            ax.plot(self.zaero[iaero]*np.ones(len(iaoa)),np.degrees(self.aero_point[iaero].aoas[iaoa]),self.aero_point[iaero].clcdcm[iaoa,0],'k-')
+            ax.plot([self.zaero[iaero]],[np.degrees(self.aero_point[iaero].aoa_clmax)],[self.aero_point[iaero].clmax],'bo')
+            ax.plot([self.zaero[iaero]],[np.degrees(self.aero_point[iaero].aoa_tp)],[self.aero_point[iaero].CL],'go')
+        for iaero in ihigh_lights:
+            ax.plot([self.zaero[iaero]],[np.degrees(self.aero_point[iaero].aoa_tp)],[self.aero_point[iaero].CL],'ro')
+        ax.set_ylim(aoalim)
+        plt.title(title)
+        plt.show()
+    
 
 
+    
     
 #================================================================================================
 ## Class containing the data and functions of an aerodynamic calculation point
@@ -278,6 +295,10 @@ class aero_calc_point:
         self.cl = mf.quick_interpolation_periodic_function(self.aoas,self.clcdcm[:,0])
         self.cd = mf.quick_interpolation_periodic_function(self.aoas,self.clcdcm[:,1])
         self.cm = mf.quick_interpolation_periodic_function(self.aoas,self.clcdcm[:,2])
+        # Find AoA and Cl for max CL to be used for stall margin 
+        iclmax = np.argmax(clcdcm[:,0])
+        self.clmax = clcdcm[iclmax,0]
+        self.aoa_clmax = self.aoas[iclmax]
         
         
 
@@ -341,6 +362,68 @@ def change_reference_curve(fname,setno,new_ref_tab,fname_new):
     # Save to file
     header_txt='Aerodynamic blade data \n'+''.join('{:>16s} '.format(text) for text in aeheader) + '\n'+'@1 {:d}'.format(Nae)
     np.savetxt(fname_new,new_aero_sec_data,fmt='%16.8e',header=header_txt,comments='',delimiter=' ')
+
+## Read HAWC2 polars
+def read_and_interpolate_HAWC2_polars(fname,daoa,itype):
+    # Read airfoil polars and interpolate them to equidistant arrays
+    fd=open(fname,'r')
+    txt=fd.read()
+    lines=txt.split("\n")
+    naoa = int(360.0/daoa) + 1
+    aoas_deg = np.linspace(-180.0,180.0,naoa)
+    # All AoAs are in radians
+    aoas = np.radians(aoas_deg)
+    iline=0
+    nset=int(lines[iline].split()[0])
+    prosets = {}
+    origprosets = {}
+    for iset in range(nset):
+        iline+=1
+        nairfoil = int(lines[iline].split()[0])
+        proairfoil = {}
+        origproairfoil = {}
+        for iairfoil in range(nairfoil):
+            iline+=1
+            airfoil_nr, nrows = map(int, lines[iline].split()[:2])
+            thickness = np.float(lines[iline].split()[2])
+            polar = np.array([lines[iline+i+1].split() for i in range(nrows)], dtype = np.float)
+            origproairfoil[thickness] = polar
+            iline+=nrows
+            polar_curve = mf.curve_interpolate(itype,polar[:,0], polar[:,1:])
+            proairfoil[thickness] = polar_curve.fcn(aoas_deg)
+        prosets[iset] = proairfoil
+        origprosets[iset] = origproairfoil
+    return naoa,aoas, prosets,origprosets
+
+
+## Read Flex polars
+def read_and_interpolate_Flex_polars(fname,daoa,itype):
+    # Read airfoil polars and interpolate them to equidistant arrays
+    fd=open(fname,'r')
+    txt=fd.read()
+    lines=txt.split("\n")
+    naoa = int(360.0/daoa) + 1
+    aoas_deg = np.linspace(-180.0,180.0,naoa)
+    # All AoAs are in radians
+    aoas = np.radians(aoas_deg)
+    prosets = {}
+    origprosets = {}
+    nairfoil = int(lines[1].split()[0])
+    thicknesses = np.array(lines[2].split(), dtype=np.float)
+    nrows = int(lines[3].split()[0])
+    proairfoil = {}
+    origproairfoil = {}
+    iline=4
+    for iairfoil in range(nairfoil):
+        iline+=1
+        polar = np.array([lines[iline+i].split() for i in range(nrows)], dtype=np.float)
+        origproairfoil[thicknesses[iairfoil]] = polar
+        iline+=nrows
+        polar_curve = mf.curve_interpolate(itype, polar[:,0], polar[:,1:])
+        proairfoil[thicknesses[iairfoil]] = polar_curve.fcn(aoas_deg)
+    prosets[0] = proairfoil
+    origprosets[0] = origproairfoil
+    return naoa,aoas,prosets,origprosets
 
 
 

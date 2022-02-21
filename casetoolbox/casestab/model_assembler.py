@@ -254,6 +254,7 @@ class rotor():
         self.power = 0.0
         self.torque= 0.0
         self.thrust= 0.0
+        self.CP = 0.0
 
 
         # Compute radial positions of the ACP on the blades and check that they are the same (diff < 1mm)
@@ -667,6 +668,8 @@ class model():
         if 'axissym' in r.type:
             r.power = r.Nb*r.power
             r.thrust= r.Nb*r.thrust
+            Pkin = 0.5*r.wind.rho*np.pi*r.wake.model.R**2*r.wind.lookup.umean**3
+            r.CP = r.power/Pkin
 
 
 
