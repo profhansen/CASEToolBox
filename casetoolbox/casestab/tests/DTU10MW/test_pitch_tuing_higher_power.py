@@ -11,9 +11,9 @@ Tlimit = 1.4e6
 StallMargin = np.array([])
 reltol=0.01
 max_pitch_increment=4.0
-min_CP_gradient=0.01
+max_CP=0.5
 Nmaxiter=3
 prefix = 'test_higher_power'
 plot_flag=False
-rotor_models.tune_pitch_curve(Prated,Tlimit,StallMargin,reltol,max_pitch_increment,min_CP_gradient,Nmaxiter,prefix,plot_flag)
+rotor_models.tune_pitch_curve(Prated,Tlimit,StallMargin,reltol,max_pitch_increment,max_CP,Nmaxiter,prefix,plot_flag)
 

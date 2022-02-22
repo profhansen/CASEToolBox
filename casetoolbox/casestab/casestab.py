@@ -36,8 +36,9 @@ from matplotlib import pyplot as plt
 #
 class rotor_models():
     def __init__(self,filename):
-        # Remember folder 
+        # Remember folder and filename
         self.folder = os.path.dirname(filename)
+        self.filename = filename
         # Read json file        
         with open(filename) as json_file:
             input_para = json.load(json_file)
@@ -142,7 +143,9 @@ class rotor_models():
                 model.substructures[1].bearing.state.angle = np.radians(self.ops[iops,1])
                 model.rotors[0].wind.lookup.umean = self.ops[iops,0]
                 self.models.append(deepcopy(model))
+    #=============================================================================================================================================
     # Perform steady state computation
+    #=============================================================================================================================================
     def steady_state_computation(self,ops_list=[]):
         if len(ops_list) == 0:
             ops_list = np.arange(self.Nops)
@@ -154,7 +157,9 @@ class rotor_models():
             self.pwr[iops] = self.models[iops].rotors[0].power
             self.thr[iops] = self.models[iops].rotors[0].thrust
             self.CP[iops]  = self.models[iops].rotors[0].CP
+    #=============================================================================================================================================
     # Save steady state results
+    #=============================================================================================================================================
     def save_steady_state_results(self,prefix=''):
         defl_header = ['z-coord. [m] 1','ux_blade [m] 2','uy_blade [m] 3','uz_blade [m] 4','ux_rotor [m] 5','uy_rotor [m] 6','uz_rotor [m] 7','rotx_blade [deg] 8','roty_blade [deg] 9','rotz_blade [deg] 10']
         bem_header  = ['z-coord. [m] 1','a [-] 2','ap [-] 3','AoA [deg] 4', 'Urel [m/s] 5','Inplane Fx [N/m] 6','Axial Fy [N/m] 7','Moment [Nm/m] 8', 
@@ -174,8 +179,18 @@ class rotor_models():
             # Save results 
             header_txt='# Steady state results for all aerodynamic calculation points \n'+''.join('{:>20s} '.format(text) for text in bem_header)
             np.savetxt(bem_filename,data,fmt='%20.10e',header=header_txt,comments='',delimiter=' ')
+    #=============================================================================================================================================
     # Pitch curve tuner
-    def tune_pitch_curve(self,Prated,Tlimit,StallMargin,reltol,max_pitch_increment,min_CP_gradient=0.01,Nmaxiter=3,prefix='',plot_flag=False):
+    #=============================================================================================================================================
+    def tune_pitch_curve(self,Prated,Tlimit,StallMargin,reltol,max_pitch_increment,max_CP=0.55,Nmaxiter=3,prefix='',plot_flag=False):
+        # Reasons for tuning
+        tune_reasons=['No tuning','Power','Thrust','Stall margin']
+        # Initiate all reasons to "no tuning"
+        tune_reason_ops=[]
+        for iops in range(self.Nops):
+            tune_reason_ops.append(tune_reasons[0])
+        # Array for remembering the CP gradients
+        CPgrad = -np.ones(self.Nops)
         # Compute initial steady state of rotor models
         print('********************** Runing steady state computation with original pitch curve *****************')
         self.steady_state_computation()
@@ -198,21 +213,30 @@ class rotor_models():
         axs[2].set_xlabel('Wind speed [m/s]')
         axs[2].set_ylabel('Thrust [N]')
         plt.show(block=plot_flag)
-        # Adjust pitch for the operation point where the power or the thrust is exceede
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        # Adjust pitch for the operation point where the power or the thrust is exceeded
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         icount = 0
         while icount < Nmaxiter:
             # Increment counter
             icount += 1 
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             # Find the operation points where the power or the thrust are exceeded and the errors are larger than 'reltol'
-            iops_to_adjust = []
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+            iops_to_adjust_power = []
+            iops_to_adjust_thrust = []
+            iops_to_adjust_stallmargin = []
             for iops in range(self.Nops):
                 # Check power
-                if np.abs(self.pwr[iops]-Prated)/Prated > reltol:
-                    iops_to_adjust.append(iops)
+                rho = self.models[iops].winds[0].rho
+                R = self.models[iops].rotors[0].wake.model.R
+                CP_rated = 2.0*Prated/(rho*np.pi*R**2*self.ops[iops,0]**3)
+                if CP_rated < max_CP and np.abs(self.pwr[iops]-Prated)/Prated > reltol:
+                    iops_to_adjust_power.append(iops)
                 # Check thrust
                 if Tlimit > 0.0 and (self.thr[iops]-Tlimit)/Tlimit > reltol:
-                    iops_to_adjust.append(iops)
-                # Check stall 
+                    iops_to_adjust_thrust.append(iops)
+                # Check stall margin
                 StallMarginFlag =  StallMargin.shape[0] > 0
                 if StallMarginFlag: 
                     dat,iaero_dat = self.models[iops].rotors[0].blades[0].get_AoA_stall_margins(StallMargin[-1,0])
@@ -222,20 +246,24 @@ class rotor_models():
                     daoa_min = np.min(daoa)
                     ihigh_light = iaero_dat[np.argmin(daoa)]
                     if daoa_min < 0.2:
-                        iops_to_adjust.append(iops)
+                        iops_to_adjust_stallmargin.append(iops)
                         if plot_flag:
-                            self.models[iops_to_adjust[iops]].rotors[0].blades[0].plot_stall_margins([-10,40],[ihigh_light],'Stall margin at WSP = {:4.1f} m/s'.format(self.ops[iops,0]),plot_flag)
+                            self.models[iops].rotors[0].blades[0].plot_stall_margins([-10,40],[ihigh_light],'Stall margin at WSP = {:4.1f} m/s'.format(self.ops[iops,0]),plot_flag)
             # Number of operational points to adjust the pitch for
+            iops_to_adjust = np.union1d(iops_to_adjust_power,np.union1d(iops_to_adjust_thrust,iops_to_adjust_stallmargin))
             iops_to_adjust = np.unique(np.array(iops_to_adjust,dtype=int))
             Nops = len(iops_to_adjust)
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             # Check if we can stop
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             if Nops == 0:
                 break
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             # Save results for last validation run
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             theta0 = self.ops[iops_to_adjust,1].copy()
             pwr0 = self.pwr[iops_to_adjust].copy()
             thr0 = self.thr[iops_to_adjust].copy()
-            CP0 = self.CP[iops_to_adjust].copy()
             stm0 =  np.zeros(Nops)
             if StallMarginFlag: 
                 for iops in range(Nops):
@@ -245,7 +273,9 @@ class rotor_models():
                         daoa[i] = dat[i,2] - np.interp(dat[i,1],StallMargin[:,0],StallMargin[:,1])
                     daoa_min = np.min(daoa)
                     stm0[iops] = daoa_min
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             # Make perturbation to pitch curve
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             theta1 = theta0 + np.ones(Nops)
             for iops in range(Nops):
                 self.ops[iops_to_adjust[iops],1] = theta1[iops]
@@ -256,7 +286,6 @@ class rotor_models():
             # Read results for perturbed pitch curve
             pwr1 = self.pwr[iops_to_adjust].copy()
             thr1 = self.thr[iops_to_adjust].copy()
-            CP1 = self.CP[iops_to_adjust].copy()
             stm1 =  np.zeros(Nops)
             if StallMarginFlag: 
                 for iops in range(Nops):
@@ -266,31 +295,37 @@ class rotor_models():
                         daoa[i] = dat[i,2] - np.interp(dat[i,1],StallMargin[:,0],StallMargin[:,1])
                     daoa_min = np.min(daoa)
                     stm1[iops] = daoa_min
-            # Compute the pitch angle that gives the contrained power or thrust
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+            # Compute the pitch angle that satisfies the limits if the CP gradient is not too low (numerically)
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             for iops in range(Nops):
-                if CP1[iops] - CP0[iops] > - min_CP_gradient and pwr0[iops] < Prated and thr0[iops] < Tlimit and stm0[iops] > -0.2:
-                    tuned_pitch = theta0[iops]
+                P0 = pwr0[iops]
+                P1 = pwr1[iops]
+                T0 = thr0[iops]
+                T1 = thr1[iops]
+                S0 = stm0[iops]
+                S1 = stm1[iops]
+                theta_Tlimit     = (T1*theta0[iops]-T0*theta1[iops]+Tlimit*theta1[iops]-Tlimit*theta0[iops])/(T1-T0)
+                theta_Prated     = (P1*theta0[iops]-P0*theta1[iops]+Prated*theta1[iops]-Prated*theta0[iops])/(P1-P0)
+                if StallMarginFlag: 
+                    theta_StallMargin = (S1*theta0[iops]-S0*theta1[iops])/(S1-S0)
+                    pitch_angles = np.array([theta_Prated,theta_Tlimit,theta_StallMargin])
                 else:
-                    P0 = pwr0[iops]
-                    P1 = pwr1[iops]
-                    T0 = thr0[iops]
-                    T1 = thr1[iops]
-                    S0 = stm0[iops]
-                    S1 = stm1[iops]
-                    theta_Tlimit     = (T1*theta0[iops]-T0*theta1[iops]+Tlimit*theta1[iops]-Tlimit*theta0[iops])/(T1-T0)
-                    theta_Prated     = (P1*theta0[iops]-P0*theta1[iops]+Prated*theta1[iops]-Prated*theta0[iops])/(P1-P0)
-                    if StallMarginFlag: 
-                        theta_StallMargin = (S1*theta0[iops]-S0*theta1[iops])/(S1-S0)
-                        tuned_pitch = np.max([theta_Prated,theta_Tlimit,theta_StallMargin])
-                    else:
-                        tuned_pitch = np.max([theta_Prated,theta_Tlimit])
-                    if tuned_pitch - theta0[iops] > max_pitch_increment:
-                        tuned_pitch = theta0[iops] + max_pitch_increment
-                    if tuned_pitch - theta0[iops] < -max_pitch_increment:
-                        tuned_pitch = theta0[iops] - max_pitch_increment
+                    pitch_angles = np.array([theta_Prated,theta_Tlimit])
+                imax_pitch = np.argmax(pitch_angles)
+                tuned_pitch = pitch_angles[imax_pitch]
+                # Save reason
+                tune_reason_ops[iops_to_adjust[iops]] = tune_reasons[imax_pitch+1]
+                # Keep increment within limit
+                if tuned_pitch - theta0[iops] > max_pitch_increment:
+                    tuned_pitch = theta0[iops] + max_pitch_increment
+                if tuned_pitch - theta0[iops] < -max_pitch_increment:
+                    tuned_pitch = theta0[iops] - max_pitch_increment
                 self.ops[iops_to_adjust[iops],1] = tuned_pitch
                 self.models[iops_to_adjust[iops]].substructures[1].bearing.state.angle = np.radians(self.ops[iops_to_adjust[iops],1])
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             # Compute steady state for adjusted pitch curve
+            # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
             print('********************** Validation run in iteration no. {:d} *****************'.format(icount))
             self.steady_state_computation(iops_to_adjust)
             # Add to plot
@@ -300,10 +335,48 @@ class rotor_models():
             l.append('Iteration no. {:d}'.format(icount) )
             axs[1].legend(l)
             plt.show(block=plot_flag)
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         # Save plot of iterations
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         fig.savefig(prefix + '_pitch_tuning.png' ,dpi=300)
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
         # Save results with statement at the end on the validation
-        np.savetxt(prefix + '_result.opt',self.ops,fmt='%14.3f')
-
+        # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        header_txt='{:4d} WSP [m/s] Pitch [deg] Speed [rpm]'.format(self.ops.shape[0])
+        np.savetxt(prefix + '_tuned.opt',self.ops,fmt='%15.8f' ,header=header_txt,comments='',delimiter=' ')
+        with open(prefix + '_tuned.opt', 'a') as f:
+            f.write('# This operational data file was created with CASEStab \n')
+            f.write('# \n')
+            f.write('# Model file: {:s} \n'.format(self.filename))
+            f.write('# \n')
+            f.write('# Limits:\n')
+            f.write('#          Prated = {:12.1f} kW \n'.format(1e-3*Prated))
+            if Tlimit > 0.0:
+                f.write('#          Tlimit = {:12.0f} N \n'.format(Tlimit))
+            if StallMarginFlag: 
+                for ism in range(StallMargin.shape[0]):
+                    f.write('#          Stall margin for {:3.1f}% airfoil = {:3.1f} deg \n'.format(StallMargin[ism,0],StallMargin[ism,1]))
+            f.write('# \n')
+            f.write('# Used {:d} of maximum {:d} iterations \n'.format(icount,Nmaxiter))
+            f.write('# \n')
+            f.write('# Tuning reasons and values \n')
+            f.write('# \n')
+            f.write('#    WSP [m/s]         Reason        Description    \n')
+            for iops in range(self.Nops):
+                if tune_reason_ops[iops] == tune_reasons[0]:
+                    f.write('# {:12.3f} {:>14s} \n'.format(self.ops[iops,0],tune_reason_ops[iops]))
+                elif tune_reason_ops[iops] == tune_reasons[1]:
+                    f.write('# {:12.3f} {:>14s}        Difference to rated power = {:5.1f} kW \n'.format(self.ops[iops,0],tune_reason_ops[iops],1e-3*(self.pwr[iops]-Prated)))
+                elif tune_reason_ops[iops] == tune_reasons[2]:
+                    f.write('# {:12.3f} {:>14s}        Difference to thrust limit = {:5.1f} kN \n'.format(self.ops[iops,0],tune_reason_ops[iops],1e-3*(self.thr[iops]-Tlimit)))
+                else:
+                    dat,iaero_dat = self.models[iops].rotors[0].blades[0].get_AoA_stall_margins(StallMargin[-1,0])
+                    daoa = np.zeros(dat.shape[0])
+                    for i in range(dat.shape[0]):
+                        daoa[i] = dat[i,2] - np.interp(dat[i,1],StallMargin[:,0],StallMargin[:,1])
+                    iaoa_min = np.argmin(daoa)
+                    ihigh_light = iaero_dat[iaoa_min]
+                    f.write('# {:12.3f} {:>14s}        Minimum stall margin = {:5.1f} deg for {:3.1f}% airfoil at z_blade = {:4.1f} m \n'.format(self.ops[iops,0], \
+                        tune_reason_ops[iops],dat[iaoa_min,2],self.models[iops].rotors[0].blades[0].aero_point[ihigh_light].thk,self.models[iops].rotors[0].blades[0].zaero[ihigh_light]))
 
 

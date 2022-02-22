@@ -13,9 +13,9 @@ StallMargin = np.array([[24.1,10.0],
                         [36.0,4.0]])
 reltol=0.01
 max_pitch_increment=4.0
-min_CP_gradient=0.01
+max_CP=0.5
 Nmaxiter=3
 prefix = 'test_stall_margin'
 plot_flag=False
-rotor_models.tune_pitch_curve(Prated,Tlimit,StallMargin,reltol,max_pitch_increment,min_CP_gradient,Nmaxiter,prefix,plot_flag)
+rotor_models.tune_pitch_curve(Prated,Tlimit,StallMargin,reltol,max_pitch_increment,max_CP,Nmaxiter,prefix,plot_flag)
 
