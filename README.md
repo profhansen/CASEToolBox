@@ -1,6 +1,6 @@
 # CASEToolBox
 
-CASEToolBox is a software package for performing Computational Aero-Servo-Elastic analysis of wind turbines. The code is still under development. The package currently only has the tool CASEStab for power and stability analysis. Currently (November 2021), CASEStab can only be used for computing the stationary steady state of a wind turbine rotor with identical blades in a uniform flow without gravity, and for computing the structural blade modal frequencies and mode shapes. See a [presentation](./casetoolbox/casestab/docs/CASEStab.pdf) and an unfinished draft of a [Theory manual](./casetoolbox/casestab/docs/theory_manual.pdf).
+CASEToolBox is a software package for performing Computational Aero-Servo-Elastic analysis of wind turbines. The code is still under development. The package has the tool CASEStab for power and stability analysis and the tool CASEDamp for analysing the aerodynamic damping of 2D airfoil translation and twist. Currently (February 2022), CASEStab can only be used for computing the stationary steady state of a wind turbine rotor with identical blades in a uniform flow without gravity, and for computing the structural blade modal frequencies and mode shapes. See a [presentation](./casetoolbox/casestab/docs/CASEStab.pdf) and an unfinished draft of a [Theory manual](./casetoolbox/casestab/docs/theory_manual.pdf).
 
 ## Installation
 
@@ -18,6 +18,8 @@ python corotbeam_precompiled_functions.py
 python model_precompiled_functions.py
 ```
 which create two associated pyd-files.
+
+CASEDamp contains a single module that needs CC numba precompiling. 
 
 ## Running tests
 
