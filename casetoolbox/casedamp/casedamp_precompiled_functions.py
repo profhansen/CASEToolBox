@@ -49,6 +49,13 @@ def compute_damping_terms(aoas,psis,clcd_clpcdp):
             W_tors1[i,j] = 0.5*(cdp[i]*cv-clp[i]*sv)
             W_tors2[i,j] = 0.5*(cdp[i]*sv+clp[i]*cv)
     return W_tran1,W_tran2,W_tors1,W_tors2
+
+# Function for computing the damping coefficients
+@cc.export('compute_damping_eta','(f8,f8,f8,f8,f8[:,:],f8[:,:],f8[:,:],f8[:,:])')
+def compute_damping_eta(ured,gama,beta,phi,W_tran1,W_tran2,W_tors1,W_tors2):
+    eta = W_tran1 + beta**2*W_tran2 + ured*gama*np.sin(phi)*W_tors1 + ured*gama*beta*np.cos(phi)*W_tors2
+    return eta
+
 #===============================================================================================
 # Compilation 
 #===============================================================================================

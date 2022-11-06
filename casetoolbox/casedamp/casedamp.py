@@ -175,9 +175,9 @@ class aero_damp_analyzer:
         self.k    = k
         self.ured = 1.0/k
         # Compute damping terms
-        self.compute_damping_terms()
+        self.W_tran1,self.W_tran2,self.W_tors1,self.W_tors2 = cpf.compute_damping_terms(self.aoas,self.psis,self.clcd_clpcdp)
         self.polar_changed = False
-        self.compute_damping_eta()
+        self.eta = cpf.compute_damping_eta(self.ured,self.gama,self.beta,self.phi,self.W_tran1,self.W_tran2,self.W_tors1,self.W_tors2)
         # Create figure
         self.fig, self.ax = plt.subplots(2,1,figsize=[10,12],gridspec_kw={'height_ratios':[1,2]})
         # Add title
@@ -239,14 +239,6 @@ class aero_damp_analyzer:
         self.clcd_clpcdp[:,2] = cl.der(self.aoas)*180.0/np.pi
         self.clcd_clpcdp[:,3] = cd.der(self.aoas)*180.0/np.pi
 
-    # Function for computing the damping coefficients
-    def compute_damping_terms(self):
-        self.W_tran1,self.W_tran2,self.W_tors1,self.W_tors2 = cpf.compute_damping_terms(self.aoas,self.psis,self.clcd_clpcdp)
-
-    # Function for computing the damping coefficients
-    def compute_damping_eta(self):
-        self.eta = self.W_tran1 + self.beta**2*self.W_tran2 + self.ured*self.gama*np.sin(self.phi)*self.W_tors1 + self.ured*self.gama*self.beta*np.cos(self.phi)*self.W_tors2
-
 
     # Function for the pick event on the CL and CD curves
     def onpick(self,event):
@@ -297,9 +289,9 @@ class aero_damp_analyzer:
         # Update the damping contour plot
         if event.key == 'u':
             if self.polar_changed:
-                self.compute_damping_terms()
+                self.W_tran1,self.W_tran2,self.W_tors1,self.W_tors2 = cpf.compute_damping_terms(self.aoas,self.psis,self.clcd_clpcdp)
                 self.polar_changed = False
-            self.compute_damping_eta()
+            self.eta = cpf.compute_damping_eta(self.ured,self.gama,self.beta,self.phi,self.W_tran1,self.W_tran2,self.W_tors1,self.W_tors2)
             self.update_damping_plot()
         # Modify the 'beta' value
         if event.key == 'b':
@@ -369,6 +361,7 @@ class aero_damp_analyzer:
     # Function that replots the damping contour plot
     def update_damping_plot(self):
         self.ax[1].contourf(self.aoa_grid,self.psi_grid,self.eta,levels=self.l,colors=self.m)
+        self.selected_point.figure.canvas.draw()
 
 # Main function of the package
 def casedamp(fn,itype,iset,iairfoil,aoas,psis,beta=0.0,gama=0.0,phi=0.0,k=0.1):
